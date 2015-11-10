@@ -11,6 +11,8 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 
 import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.ISODateTimeFormat;
 import org.opensaml.DefaultBootstrap;
 import org.opensaml.common.SAMLVersion;
 import org.opensaml.saml2.core.Assertion;
@@ -61,37 +63,70 @@ public class SamlAssertionProducer {
 	private CertManager certManager = new CertManager();
 	
 	public Response createSAMLResponse(final String subjectId, final DateTime authenticationTime,
-			                           final String credentialType, final HashMap<String, List<String>> attributes, String issuer, Integer samlAssertionDays) {
-		
-		try {
+                                       final String credentialType, final HashMap<String, List<String>> attributes,
+                                       String issuer, Integer samlAssertionDays, Integer samlAssertionSeconds,
+                                       String issueDateAssertionToSet, String issueDateResponseToSet,
+                                       String expirationDateToSet, String defaultDateToSet) {
+        try {
 			DefaultBootstrap.bootstrap();
-			
+            DateTimeFormatter df = ISODateTimeFormat.dateTime();
 			Signature signature = createSignature();
 			Status status = createStatus();
 			Issuer responseIssuer = null;
 			Issuer assertionIssuer = null;
 			Subject subject = null;
 			AttributeStatement attributeStatement = null;
-			
+            DateTime defaultDateTime = null;
+            Assertion assertion = null;
+            AuthnStatement authnStatement = null;
+            Response response = null;
+            DateTime current = new DateTime();
+
+            if (defaultDateToSet != null)
+                defaultDateTime = df.parseDateTime(defaultDateToSet);
+
 			if (issuer != null) {
 				responseIssuer = createIssuer(issuer);
 				assertionIssuer = createIssuer(issuer);
 			}
-			
+
 			if (subjectId != null) {
-				subject = createSubject(subjectId, samlAssertionDays);
+                subject = createSubject(subjectId, samlAssertionDays, samlAssertionSeconds,
+                                        expirationDateToSet, defaultDateTime);
 			}
 			
 			if (attributes != null && attributes.size() != 0) {
 				attributeStatement = createAttributeStatement(attributes);
 			}
-			
-			AuthnStatement authnStatement = createAuthnStatement(authenticationTime);
-			
-			Assertion assertion = createAssertion(new DateTime(), subject, assertionIssuer, authnStatement, attributeStatement);
-			
-			Response response = createResponse(new DateTime(), responseIssuer, status, assertion);
-			response.setSignature(signature);
+
+			authnStatement = createAuthnStatement(credentialType, authenticationTime);
+
+			if (issueDateAssertionToSet == null) {
+                if (defaultDateTime == null)
+                    assertion = createAssertion(current, subject, assertionIssuer,
+                                                authnStatement, attributeStatement);
+                else
+                    assertion = createAssertion(defaultDateTime, subject, assertionIssuer,
+                                                authnStatement, attributeStatement);
+            }
+            else {
+                DateTime issueDateAssertion = df.parseDateTime(issueDateAssertionToSet);
+                assertion = createAssertion(issueDateAssertion, subject, assertionIssuer,
+                                            authnStatement, attributeStatement);
+            }
+
+			if (issueDateResponseToSet == null) {
+                if (defaultDateTime == null)
+                    response = createResponse(current, responseIssuer, status, assertion);
+                else
+                    response = createResponse(defaultDateTime, responseIssuer, status, assertion);
+            }
+            else {
+                DateTime issueDateResponse = df.parseDateTime(issueDateResponseToSet);
+                response = createResponse(issueDateResponse, responseIssuer, status, assertion);
+            }
+
+            response.setSignature(signature);
 			
 			ResponseMarshaller marshaller = new ResponseMarshaller();
 			Element element = marshaller.marshall(response);
@@ -104,8 +139,8 @@ public class SamlAssertionProducer {
 			XMLHelper.writeNode(element, baos);
 		
 			return response;
-			
-		} catch (Throwable t) {
+		}
+        catch (Throwable t) {
 			t.printStackTrace();
 			return null;
 		}
@@ -139,8 +174,8 @@ public class SamlAssertionProducer {
 		return response;
 	}
 	
-	private Assertion createAssertion(final DateTime issueDate, Subject subject, Issuer issuer, AuthnStatement authnStatement,
-			                          AttributeStatement attributeStatement) {
+	private Assertion createAssertion(final DateTime issueDate, Subject subject, Issuer issuer,
+                                      AuthnStatement authnStatement, AttributeStatement attributeStatement) {
 		AssertionBuilder assertionBuilder = new AssertionBuilder();
 		Assertion assertion = assertionBuilder.buildObject();
 		assertion.setID(UUID.randomUUID().toString());
@@ -164,12 +199,24 @@ public class SamlAssertionProducer {
 		issuer.setValue(issuerName);	
 		return issuer;
 	}
-	
-	private Subject createSubject(final String subjectId, final Integer samlAssertionDays) {
-		DateTime currentDate = new DateTime();
-		if (samlAssertionDays != null)
-			currentDate = currentDate.plusDays(samlAssertionDays);
-		
+
+    private Subject createSubject(final String subjectId, final Integer samlAssertionDays,
+                                  final Integer samlAssertionSeconds, final String expirationDateToSet,
+                                  final DateTime defaultDateToSet) {
+        DateTimeFormatter df = ISODateTimeFormat.dateTime();
+        DateTime currentDate = null;
+        if (expirationDateToSet == null) {
+            currentDate = (defaultDateToSet == null) ? (new DateTime()).plusDays(1) : defaultDateToSet;
+
+            if (samlAssertionDays != null)
+                currentDate = currentDate.plusDays(samlAssertionDays);
+            if (samlAssertionSeconds != null)
+                currentDate = currentDate.plusSeconds(samlAssertionSeconds);
+        }
+        else {
+            currentDate = df.parseDateTime(expirationDateToSet);
+        }
+
 		// create name element
 		NameIDBuilder nameIdBuilder = new NameIDBuilder(); 
 		NameID nameId = nameIdBuilder.buildObject();
@@ -194,12 +241,16 @@ public class SamlAssertionProducer {
 		return subject;
 	}
 	
-	private AuthnStatement createAuthnStatement(final DateTime issueDate) {
+	private AuthnStatement createAuthnStatement(final String credentialType, final DateTime issueDate) {
 		// create authcontextclassref object
 		AuthnContextClassRefBuilder classRefBuilder = new AuthnContextClassRefBuilder();
 		AuthnContextClassRef classRef = classRefBuilder.buildObject();
-		classRef.setAuthnContextClassRef("urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport");
-		
+
+        if (!credentialType.equals("token"))
+    		classRef.setAuthnContextClassRef("urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport");
+	    else
+            classRef.setAuthnContextClassRef("urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken");
+
 		// create authcontext object
 		AuthnContextBuilder authContextBuilder = new AuthnContextBuilder();
 		AuthnContext authnContext = authContextBuilder.buildObject();
@@ -227,7 +278,8 @@ public class SamlAssertionProducer {
 				
 				for (String value : entry.getValue()) {
 					XSStringBuilder stringBuilder = new XSStringBuilder();
-					XSString attributeValue = stringBuilder.buildObject(AttributeValue.DEFAULT_ELEMENT_NAME, XSString.TYPE_NAME);
+					XSString attributeValue = stringBuilder.buildObject(AttributeValue.DEFAULT_ELEMENT_NAME,
+                                                                        XSString.TYPE_NAME);
 					attributeValue.setValue(value);
 					attribute.getAttributeValues().add(attributeValue);
 				}
