@@ -204,17 +204,20 @@ public class SamlAssertionProducer {
                                   final Integer samlAssertionSeconds, final String expirationDateToSet,
                                   final DateTime defaultDateToSet) {
         DateTimeFormatter df = ISODateTimeFormat.dateTime();
-        DateTime currentDate = null;
+        DateTime expiration = null;
         if (expirationDateToSet == null) {
-            currentDate = (defaultDateToSet == null) ? (new DateTime()).plusDays(1) : defaultDateToSet;
-
-            if (samlAssertionDays != null)
-                currentDate = currentDate.plusDays(samlAssertionDays);
-            if (samlAssertionSeconds != null)
-                currentDate = currentDate.plusSeconds(samlAssertionSeconds);
+            expiration = (defaultDateToSet == null) ? new DateTime() : defaultDateToSet;
+            if (samlAssertionDays == null && samlAssertionSeconds == null)
+                expiration = expiration.plusDays(1);
+            else {
+                if (samlAssertionDays != null)
+                    expiration = expiration.plusDays(samlAssertionDays);
+                if (samlAssertionSeconds != null)
+                    expiration = expiration.plusSeconds(samlAssertionSeconds);
+            }
         }
         else {
-            currentDate = df.parseDateTime(expirationDateToSet);
+            expiration = df.parseDateTime(expirationDateToSet);
         }
 
         // create name element
@@ -225,7 +228,7 @@ public class SamlAssertionProducer {
 
         SubjectConfirmationDataBuilder dataBuilder = new SubjectConfirmationDataBuilder();
         SubjectConfirmationData subjectConfirmationData = dataBuilder.buildObject();
-        subjectConfirmationData.setNotOnOrAfter(currentDate);
+        subjectConfirmationData.setNotOnOrAfter(expiration);
 
         SubjectConfirmationBuilder subjectConfirmationBuilder = new SubjectConfirmationBuilder();
         SubjectConfirmation subjectConfirmation = subjectConfirmationBuilder.buildObject();
