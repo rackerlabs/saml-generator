@@ -11,6 +11,8 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 
 import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.ISODateTimeFormat;
 import org.opensaml.DefaultBootstrap;
 import org.opensaml.common.SAMLVersion;
 import org.opensaml.saml2.core.Assertion;
@@ -56,212 +58,265 @@ import org.w3c.dom.Element;
 
 public class SamlAssertionProducer {
 
-	private String privateKeyLocation;
-	private String publicKeyLocation;
-	private CertManager certManager = new CertManager();
-	
-	public Response createSAMLResponse(final String subjectId, final DateTime authenticationTime,
-			                           final String credentialType, final HashMap<String, List<String>> attributes, String issuer, Integer samlAssertionDays) {
-		
-		try {
-			DefaultBootstrap.bootstrap();
-			
-			Signature signature = createSignature();
-			Status status = createStatus();
-			Issuer responseIssuer = null;
-			Issuer assertionIssuer = null;
-			Subject subject = null;
-			AttributeStatement attributeStatement = null;
-			
-			if (issuer != null) {
-				responseIssuer = createIssuer(issuer);
-				assertionIssuer = createIssuer(issuer);
-			}
-			
-			if (subjectId != null) {
-				subject = createSubject(subjectId, samlAssertionDays);
-			}
-			
-			if (attributes != null && attributes.size() != 0) {
-				attributeStatement = createAttributeStatement(attributes);
-			}
-			
-			AuthnStatement authnStatement = createAuthnStatement(authenticationTime);
-			
-			Assertion assertion = createAssertion(new DateTime(), subject, assertionIssuer, authnStatement, attributeStatement);
-			
-			Response response = createResponse(new DateTime(), responseIssuer, status, assertion);
-			response.setSignature(signature);
-			
-			ResponseMarshaller marshaller = new ResponseMarshaller();
-			Element element = marshaller.marshall(response);
-			
-			if (signature != null) {
-				Signer.signObject(signature);
-			}
-			
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			XMLHelper.writeNode(element, baos);
-		
-			return response;
-			
-		} catch (Throwable t) {
-			t.printStackTrace();
-			return null;
-		}
-	}
+    private String privateKeyLocation;
+    private String publicKeyLocation;
+    private CertManager certManager = new CertManager();
 
-	public String getPrivateKeyLocation() {
-		return privateKeyLocation;
-	}
+    public Response createSAMLResponse(final String subjectId, final DateTime authenticationTime,
+                                       final String credentialType, final HashMap<String, List<String>> attributes,
+                                       String issuer, Integer samlAssertionDays, Integer samlAssertionSeconds,
+                                       String issueDateAssertionToSet, String issueDateResponseToSet,
+                                       String expirationDateToSet, String defaultDateToSet) {
+        try {
+            DefaultBootstrap.bootstrap();
+            DateTimeFormatter df = ISODateTimeFormat.dateTime();
+            Signature signature = createSignature();
+            Status status = createStatus();
+            Issuer responseIssuer = null;
+            Issuer assertionIssuer = null;
+            Subject subject = null;
+            AttributeStatement attributeStatement = null;
+            DateTime defaultDateTime = null;
+            Assertion assertion = null;
+            AuthnStatement authnStatement = null;
+            Response response = null;
+            DateTime current = new DateTime();
 
-	public void setPrivateKeyLocation(String privateKeyLocation) {
-		this.privateKeyLocation = privateKeyLocation;
-	}
+            if (defaultDateToSet != null)
+                defaultDateTime = df.parseDateTime(defaultDateToSet);
 
-	public String getPublicKeyLocation() {
-		return publicKeyLocation;
-	}
+            if (issuer != null) {
+                responseIssuer = createIssuer(issuer);
+                assertionIssuer = createIssuer(issuer);
+            }
 
-	public void setPublicKeyLocation(String publicKeyLocation) {
-		this.publicKeyLocation = publicKeyLocation;
-	}
-	
-	private Response createResponse(final DateTime issueDate, Issuer issuer, Status status, Assertion assertion) {
-		ResponseBuilder responseBuilder = new ResponseBuilder();
-		Response response = responseBuilder.buildObject();
-		response.setID(UUID.randomUUID().toString());
-		response.setIssueInstant(issueDate);
-		response.setVersion(SAMLVersion.VERSION_20);
-		response.setIssuer(issuer);
-		response.setStatus(status);
-		response.getAssertions().add(assertion);
-		return response;
-	}
-	
-	private Assertion createAssertion(final DateTime issueDate, Subject subject, Issuer issuer, AuthnStatement authnStatement,
-			                          AttributeStatement attributeStatement) {
-		AssertionBuilder assertionBuilder = new AssertionBuilder();
-		Assertion assertion = assertionBuilder.buildObject();
-		assertion.setID(UUID.randomUUID().toString());
-		assertion.setIssueInstant(issueDate);
-		assertion.setSubject(subject);
-		assertion.setIssuer(issuer);
-		
-		if (authnStatement != null)
-			assertion.getAuthnStatements().add(authnStatement);
-		
-		if (attributeStatement != null)
-			assertion.getAttributeStatements().add(attributeStatement);
-		
-		return assertion;
-	}
-	
-	private Issuer createIssuer(final String issuerName) {
-		// create Issuer object
-		IssuerBuilder issuerBuilder = new IssuerBuilder();
-		Issuer issuer = issuerBuilder.buildObject();
-		issuer.setValue(issuerName);	
-		return issuer;
-	}
-	
-	private Subject createSubject(final String subjectId, final Integer samlAssertionDays) {
-		DateTime currentDate = new DateTime();
-		if (samlAssertionDays != null)
-			currentDate = currentDate.plusDays(samlAssertionDays);
-		
-		// create name element
-		NameIDBuilder nameIdBuilder = new NameIDBuilder(); 
-		NameID nameId = nameIdBuilder.buildObject();
-		nameId.setValue(subjectId);
-		nameId.setFormat("urn:oasis:names:tc:SAML:2.0:nameid-format:persistent");
-	
-		SubjectConfirmationDataBuilder dataBuilder = new SubjectConfirmationDataBuilder();
-		SubjectConfirmationData subjectConfirmationData = dataBuilder.buildObject();
-		subjectConfirmationData.setNotOnOrAfter(currentDate);
-		
-		SubjectConfirmationBuilder subjectConfirmationBuilder = new SubjectConfirmationBuilder();
-		SubjectConfirmation subjectConfirmation = subjectConfirmationBuilder.buildObject();
-		subjectConfirmation.setMethod("urn:oasis:names:tc:SAML:2.0:cm:bearer");
-		subjectConfirmation.setSubjectConfirmationData(subjectConfirmationData);
-		
-		// create subject element
-		SubjectBuilder subjectBuilder = new SubjectBuilder();
-		Subject subject = subjectBuilder.buildObject();
-		subject.setNameID(nameId);
-		subject.getSubjectConfirmations().add(subjectConfirmation);
-		
-		return subject;
-	}
-	
-	private AuthnStatement createAuthnStatement(final DateTime issueDate) {
-		// create authcontextclassref object
-		AuthnContextClassRefBuilder classRefBuilder = new AuthnContextClassRefBuilder();
-		AuthnContextClassRef classRef = classRefBuilder.buildObject();
-		classRef.setAuthnContextClassRef("urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport");
-		
-		// create authcontext object
-		AuthnContextBuilder authContextBuilder = new AuthnContextBuilder();
-		AuthnContext authnContext = authContextBuilder.buildObject();
-		authnContext.setAuthnContextClassRef(classRef);
-		
-		// create authenticationstatement object
-		AuthnStatementBuilder authStatementBuilder = new AuthnStatementBuilder();
-		AuthnStatement authnStatement = authStatementBuilder.buildObject();
-		authnStatement.setAuthnInstant(issueDate);
-		authnStatement.setAuthnContext(authnContext);
-		
-		return authnStatement;
-	}
-	
-	private AttributeStatement createAttributeStatement(HashMap<String, List<String>> attributes) {
-		// create authenticationstatement object
-		AttributeStatementBuilder attributeStatementBuilder = new AttributeStatementBuilder();
-		AttributeStatement attributeStatement = attributeStatementBuilder.buildObject();
-		
-		AttributeBuilder attributeBuilder = new AttributeBuilder();
-		if (attributes != null) {
-			for (Map.Entry<String, List<String>> entry : attributes.entrySet()) {
-				Attribute attribute = attributeBuilder.buildObject();
-				attribute.setName(entry.getKey());
-				
-				for (String value : entry.getValue()) {
-					XSStringBuilder stringBuilder = new XSStringBuilder();
-					XSString attributeValue = stringBuilder.buildObject(AttributeValue.DEFAULT_ELEMENT_NAME, XSString.TYPE_NAME);
-					attributeValue.setValue(value);
-					attribute.getAttributeValues().add(attributeValue);
-				}
-				
-				attributeStatement.getAttributes().add(attribute);
-			}
-		}
-		
-		return attributeStatement;
-	}
+            if (subjectId != null) {
+                subject = createSubject(subjectId, samlAssertionDays, samlAssertionSeconds,
+                                        expirationDateToSet, defaultDateTime);
+            }
 
-	private Status createStatus() {
-		StatusCodeBuilder statusCodeBuilder = new StatusCodeBuilder();
-		StatusCode statusCode = statusCodeBuilder.buildObject();
-		statusCode.setValue(StatusCode.SUCCESS_URI);
+            if (attributes != null && attributes.size() != 0) {
+                attributeStatement = createAttributeStatement(attributes);
+            }
 
-		StatusBuilder statusBuilder = new StatusBuilder();
-		Status status = statusBuilder.buildObject();
-		status.setStatusCode(statusCode);
+            authnStatement = createAuthnStatement(credentialType, authenticationTime);
 
-		return status;
-	}
-	
-	private Signature createSignature() throws Throwable {
-		if (publicKeyLocation != null && privateKeyLocation != null) {
-			SignatureBuilder builder = new SignatureBuilder();
-			Signature signature = builder.buildObject();
-			signature.setSigningCredential(certManager.getSigningCredential(publicKeyLocation, privateKeyLocation));
-			signature.setSignatureAlgorithm(SignatureConstants.ALGO_ID_SIGNATURE_RSA_SHA1);
-			signature.setCanonicalizationAlgorithm(SignatureConstants.ALGO_ID_C14N_EXCL_OMIT_COMMENTS);
-			
-			return signature;
-		}
-		
-		return null;
-	}
+            if (issueDateAssertionToSet == null) {
+                if (defaultDateTime == null)
+                    assertion = createAssertion(current, subject, assertionIssuer,
+                                                authnStatement, attributeStatement);
+                else
+                    assertion = createAssertion(defaultDateTime, subject, assertionIssuer,
+                                                authnStatement, attributeStatement);
+            }
+            else {
+                DateTime issueDateAssertion = df.parseDateTime(issueDateAssertionToSet);
+                assertion = createAssertion(issueDateAssertion, subject, assertionIssuer,
+                                            authnStatement, attributeStatement);
+            }
+
+            if (issueDateResponseToSet == null) {
+                if (defaultDateTime == null)
+                    response = createResponse(current, responseIssuer, status, assertion);
+                else
+                    response = createResponse(defaultDateTime, responseIssuer, status, assertion);
+            }
+            else {
+                DateTime issueDateResponse = df.parseDateTime(issueDateResponseToSet);
+                response = createResponse(issueDateResponse, responseIssuer, status, assertion);
+            }
+
+            response.setSignature(signature);
+
+            ResponseMarshaller marshaller = new ResponseMarshaller();
+            Element element = marshaller.marshall(response);
+
+            if (signature != null) {
+                Signer.signObject(signature);
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            XMLHelper.writeNode(element, baos);
+
+            return response;
+        }
+        catch (Throwable t) {
+            t.printStackTrace();
+            return null;
+        }
+    }
+
+    public String getPrivateKeyLocation() {
+        return privateKeyLocation;
+    }
+
+    public void setPrivateKeyLocation(String privateKeyLocation) {
+        this.privateKeyLocation = privateKeyLocation;
+    }
+
+    public String getPublicKeyLocation() {
+        return publicKeyLocation;
+    }
+
+    public void setPublicKeyLocation(String publicKeyLocation) {
+        this.publicKeyLocation = publicKeyLocation;
+    }
+
+    private Response createResponse(final DateTime issueDate, Issuer issuer, Status status, Assertion assertion) {
+        ResponseBuilder responseBuilder = new ResponseBuilder();
+        Response response = responseBuilder.buildObject();
+        response.setID(UUID.randomUUID().toString());
+        response.setIssueInstant(issueDate);
+        response.setVersion(SAMLVersion.VERSION_20);
+        response.setIssuer(issuer);
+        response.setStatus(status);
+        response.getAssertions().add(assertion);
+        return response;
+    }
+
+    private Assertion createAssertion(final DateTime issueDate, Subject subject, Issuer issuer,
+                                      AuthnStatement authnStatement, AttributeStatement attributeStatement) {
+        AssertionBuilder assertionBuilder = new AssertionBuilder();
+        Assertion assertion = assertionBuilder.buildObject();
+        assertion.setID(UUID.randomUUID().toString());
+        assertion.setIssueInstant(issueDate);
+        assertion.setSubject(subject);
+        assertion.setIssuer(issuer);
+
+        if (authnStatement != null)
+            assertion.getAuthnStatements().add(authnStatement);
+
+        if (attributeStatement != null)
+            assertion.getAttributeStatements().add(attributeStatement);
+
+        return assertion;
+    }
+
+    private Issuer createIssuer(final String issuerName) {
+        // create Issuer object
+        IssuerBuilder issuerBuilder = new IssuerBuilder();
+        Issuer issuer = issuerBuilder.buildObject();
+        issuer.setValue(issuerName);
+        return issuer;
+    }
+
+    private Subject createSubject(final String subjectId, final Integer samlAssertionDays,
+                                  final Integer samlAssertionSeconds, final String expirationDateToSet,
+                                  final DateTime defaultDateToSet) {
+        DateTimeFormatter df = ISODateTimeFormat.dateTime();
+        DateTime expiration = null;
+        if (expirationDateToSet == null) {
+            expiration = (defaultDateToSet == null) ? new DateTime() : defaultDateToSet;
+            if (samlAssertionDays == null && samlAssertionSeconds == null)
+                expiration = expiration.plusDays(1);
+            else {
+                if (samlAssertionDays != null)
+                    expiration = expiration.plusDays(samlAssertionDays);
+                if (samlAssertionSeconds != null)
+                    expiration = expiration.plusSeconds(samlAssertionSeconds);
+            }
+        }
+        else {
+            expiration = df.parseDateTime(expirationDateToSet);
+        }
+
+        // create name element
+        NameIDBuilder nameIdBuilder = new NameIDBuilder();
+        NameID nameId = nameIdBuilder.buildObject();
+        nameId.setValue(subjectId);
+        nameId.setFormat("urn:oasis:names:tc:SAML:2.0:nameid-format:persistent");
+
+        SubjectConfirmationDataBuilder dataBuilder = new SubjectConfirmationDataBuilder();
+        SubjectConfirmationData subjectConfirmationData = dataBuilder.buildObject();
+        subjectConfirmationData.setNotOnOrAfter(expiration);
+
+        SubjectConfirmationBuilder subjectConfirmationBuilder = new SubjectConfirmationBuilder();
+        SubjectConfirmation subjectConfirmation = subjectConfirmationBuilder.buildObject();
+        subjectConfirmation.setMethod("urn:oasis:names:tc:SAML:2.0:cm:bearer");
+        subjectConfirmation.setSubjectConfirmationData(subjectConfirmationData);
+
+        // create subject element
+        SubjectBuilder subjectBuilder = new SubjectBuilder();
+        Subject subject = subjectBuilder.buildObject();
+        subject.setNameID(nameId);
+        subject.getSubjectConfirmations().add(subjectConfirmation);
+
+        return subject;
+    }
+
+    private AuthnStatement createAuthnStatement(final String credentialType, final DateTime issueDate) {
+        // create authcontextclassref object
+        AuthnContextClassRefBuilder classRefBuilder = new AuthnContextClassRefBuilder();
+        AuthnContextClassRef classRef = classRefBuilder.buildObject();
+
+        if (!credentialType.equals("token"))
+            classRef.setAuthnContextClassRef("urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport");
+        else
+            classRef.setAuthnContextClassRef("urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken");
+
+        // create authcontext object
+        AuthnContextBuilder authContextBuilder = new AuthnContextBuilder();
+        AuthnContext authnContext = authContextBuilder.buildObject();
+        authnContext.setAuthnContextClassRef(classRef);
+
+        // create authenticationstatement object
+        AuthnStatementBuilder authStatementBuilder = new AuthnStatementBuilder();
+        AuthnStatement authnStatement = authStatementBuilder.buildObject();
+        authnStatement.setAuthnInstant(issueDate);
+        authnStatement.setAuthnContext(authnContext);
+
+        return authnStatement;
+    }
+
+    private AttributeStatement createAttributeStatement(HashMap<String, List<String>> attributes) {
+        // create authenticationstatement object
+        AttributeStatementBuilder attributeStatementBuilder = new AttributeStatementBuilder();
+        AttributeStatement attributeStatement = attributeStatementBuilder.buildObject();
+
+        AttributeBuilder attributeBuilder = new AttributeBuilder();
+        if (attributes != null) {
+            for (Map.Entry<String, List<String>> entry : attributes.entrySet()) {
+                Attribute attribute = attributeBuilder.buildObject();
+                attribute.setName(entry.getKey());
+
+                for (String value : entry.getValue()) {
+                    XSStringBuilder stringBuilder = new XSStringBuilder();
+                    XSString attributeValue = stringBuilder.buildObject(AttributeValue.DEFAULT_ELEMENT_NAME,
+                                                                        XSString.TYPE_NAME);
+                    attributeValue.setValue(value);
+                    attribute.getAttributeValues().add(attributeValue);
+                }
+
+                attributeStatement.getAttributes().add(attribute);
+            }
+        }
+
+        return attributeStatement;
+    }
+
+    private Status createStatus() {
+        StatusCodeBuilder statusCodeBuilder = new StatusCodeBuilder();
+        StatusCode statusCode = statusCodeBuilder.buildObject();
+        statusCode.setValue(StatusCode.SUCCESS_URI);
+
+        StatusBuilder statusBuilder = new StatusBuilder();
+        Status status = statusBuilder.buildObject();
+        status.setStatusCode(statusCode);
+
+        return status;
+    }
+
+    private Signature createSignature() throws Throwable {
+        if (publicKeyLocation != null && privateKeyLocation != null) {
+            SignatureBuilder builder = new SignatureBuilder();
+            Signature signature = builder.buildObject();
+            signature.setSigningCredential(certManager.getSigningCredential(publicKeyLocation, privateKeyLocation));
+            signature.setSignatureAlgorithm(SignatureConstants.ALGO_ID_SIGNATURE_RSA_SHA1);
+            signature.setCanonicalizationAlgorithm(SignatureConstants.ALGO_ID_C14N_EXCL_OMIT_COMMENTS);
+
+            return signature;
+        }
+
+        return null;
+    }
 }

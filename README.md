@@ -2,6 +2,8 @@ SAML Response Generator
 =======================
 
 This is a small utility program that makes it easy to generate SAML responses for testing.
+By default the SAML response expiration is set for 1 day.
+
 
 Creating Private and Public Keys for Testing
 --------------------------------------------
@@ -23,7 +25,7 @@ You will need to create the jar file in order to use the command line tool. cd t
 Usage
 -----
 
-java -jar saml-generator-1.0.jar [-domain <arg>] [-issuer <arg>] [-privateKey <arg>] [-publicKey <arg>] [-roles <arg>] [-email <arg>] [-samlAssertionExpirationDays <arg>] [-subject <arg>]
+java -jar saml-generator-1.0.jar [-domain <arg>] [-issuer <arg>] [-privateKey <arg>] [-publicKey <arg>] [-roles <arg>] [-email <arg>] [-samlAssertionExpirationDays <arg>] [-samlAssertionExpirationSeconds <arg>] [-issueDateAssertionToSet <arg>] [-issueDateResponseToSet <arg>] [-expirationToSet <arg>] [-authInstantDateToSet <arg>] [-defaultDateToSet <arg>] [-subject <arg>] [-credentialType <arg>]
 
 ```
 -issuer
@@ -48,7 +50,28 @@ THe path to the location of the public key to decrypt assertions
 The path to the location of the private key to use to sign assertions
 
 -samlAssertionExpirationDays
-How long before the assertion is no longer valid
+How long before the assertion is no longer valid in days (additive)
+
+-samlAssertionExpirationSeconds
+How long before the assertion is no longer valid in seconds (additive)
+
+-issueDateAssertionToSet
+Datetime to set issue date on assertion, format should be in yyyy-MM-dd'T'HH:mm:ss.SSSZ
+
+-issueDateResponseToSet
+Datetime to set issue date on response, format should be in yyyy-MM-dd'T'HH:mm:ss.SSSZ
+
+-expirationDateToSet
+Datetime to set expiration date, format should be in yyyy-MM-dd'T'HH:mm:ss.SSSZ
+
+-authInstantDateToSet
+Datetime to set auth instant date, format should be in yyyy-MM-dd'T'HH:mm:ss.SSSZ
+
+-defaultDateToSet
+Datetime to use as default instead of "now", format should be in yyyy-MM-dd'T'HH:mm:ss.SSSZ
+
+-credentialType
+Identifies what credential type to use, either "password" or "token", defaults to "password"
 ```
 
 Example
