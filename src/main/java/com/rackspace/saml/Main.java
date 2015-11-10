@@ -23,17 +23,17 @@ import org.w3c.dom.Element;
 
 public class Main {
 
-	public static void main(String[] args) {
-		try {
+    public static void main(String[] args) {
+        try {
             Logger logger = LoggerFactory.getLogger(Main.class);
 
-			HashMap<String, List<String>> attributes = new HashMap<String, List<String>>();
+            HashMap<String, List<String>> attributes = new HashMap<String, List<String>>();
             DateTimeFormatter df = ISODateTimeFormat.dateTime();
-			String issuer = null;
-			String subject = null;
-			String privateKey = null;
-			String publicKey = null;
-			Integer samlAssertionExpirationDays = null;
+            String issuer = null;
+            String subject = null;
+            String privateKey = null;
+            String publicKey = null;
+            Integer samlAssertionExpirationDays = null;
             Integer samlAssertionExpirationSeconds = null;
             String issueDateAssertionToSet = null;
             String issueDateResponseToSet = null;
@@ -44,15 +44,15 @@ public class Main {
             DateTime defaultDateTime = null;
             Response responseInitial = null;
 
-			Options options = new Options();
-			options.addOption("issuer", true, "Issuer for saml assertion");
-			options.addOption("subject", true, "Subject of saml assertion");
+            Options options = new Options();
+            options.addOption("issuer", true, "Issuer for saml assertion");
+            options.addOption("subject", true, "Subject of saml assertion");
             options.addOption("email", true, "Email associated with the subject");
             options.addOption("domain", true, "Domain attribute");
-			options.addOption("roles", true, "Comma separated list of roles");
-			options.addOption("publicKey", true, "Location of public key to decrypt assertion");
-			options.addOption("privateKey", true, "Location or private key use to sign assertion");
-			options.addOption("samlAssertionExpirationDays", true, "How long before assertion is no longer valid. Can be negative.");
+            options.addOption("roles", true, "Comma separated list of roles");
+            options.addOption("publicKey", true, "Location of public key to decrypt assertion");
+            options.addOption("privateKey", true, "Location or private key use to sign assertion");
+            options.addOption("samlAssertionExpirationDays", true, "How long before assertion is no longer valid. Can be negative.");
             options.addOption("samlAssertionExpirationSeconds", true, "How long before assertion is no longer valid. Can be negative.");
             options.addOption("issueDateAssertionToSet", true, "Datetime to set issue date on assertion");
             options.addOption("issueDateResponseToSet", true, "Datetime to set issue date on response");
@@ -62,19 +62,19 @@ public class Main {
             options.addOption("credentialType", true, "Credential type to set: password or token");
 
             CommandLineParser parser = new GnuParser();
-			CommandLine cmd = parser.parse(options, args);
+            CommandLine cmd = parser.parse(options, args);
 
-			if (args.length == 0) {
-				HelpFormatter formatter = new HelpFormatter();
-				formatter.printHelp( "saml-util-1.0", options, true);
-				System.exit(1);
-			}
-		
-			issuer = cmd.getOptionValue("issuer");
-			subject = cmd.getOptionValue("subject");
-			privateKey = cmd.getOptionValue("privateKey");
-			publicKey = cmd.getOptionValue("publicKey");
-			samlAssertionExpirationDays = cmd.getOptionValue("samlAssertionExpirationDays") != null ? Integer.valueOf(cmd.getOptionValue("samlAssertionExpirationDays")) : null;
+            if (args.length == 0) {
+                HelpFormatter formatter = new HelpFormatter();
+                formatter.printHelp( "saml-util-1.0", options, true);
+                System.exit(1);
+            }
+
+            issuer = cmd.getOptionValue("issuer");
+            subject = cmd.getOptionValue("subject");
+            privateKey = cmd.getOptionValue("privateKey");
+            publicKey = cmd.getOptionValue("publicKey");
+            samlAssertionExpirationDays = cmd.getOptionValue("samlAssertionExpirationDays") != null ? Integer.valueOf(cmd.getOptionValue("samlAssertionExpirationDays")) : null;
             samlAssertionExpirationSeconds = cmd.getOptionValue("samlAssertionExpirationSeconds") != null ? Integer.valueOf(cmd.getOptionValue("samlAssertionExpirationSeconds")) : null;
             issueDateAssertionToSet = cmd.getOptionValue("issueDateAssertionToSet");
             issueDateResponseToSet = cmd.getOptionValue("issueDateResponseToSet");
@@ -84,17 +84,17 @@ public class Main {
             credentialType = cmd.getOptionValue("credentialType", "password");
 
             if (cmd.getOptionValue("domain") != null)
-				attributes.put("domain", Arrays.asList(cmd.getOptionValue("domain")));
-			
-			if (cmd.getOptionValue("roles") != null)
-				attributes.put("roles", Arrays.asList(cmd.getOptionValue("roles").split(",")));
+                attributes.put("domain", Arrays.asList(cmd.getOptionValue("domain")));
+
+            if (cmd.getOptionValue("roles") != null)
+                attributes.put("roles", Arrays.asList(cmd.getOptionValue("roles").split(",")));
 
             if (cmd.getOptionValue("email") != null)
                 attributes.put("email", Arrays.asList(cmd.getOptionValue("email")));
 
-			SamlAssertionProducer producer = new SamlAssertionProducer();
-			producer.setPrivateKeyLocation(privateKey);
-			producer.setPublicKeyLocation(publicKey);
+            SamlAssertionProducer producer = new SamlAssertionProducer();
+            producer.setPrivateKeyLocation(privateKey);
+            producer.setPublicKeyLocation(publicKey);
 
             if (authInstantDateToSet != null)
                 defaultDateTime = df.parseDateTime(authInstantDateToSet);
@@ -110,16 +110,16 @@ public class Main {
             );
 
             ResponseMarshaller marshaller = new ResponseMarshaller();
-			Element element = marshaller.marshall(responseInitial);
-			
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			XMLHelper.writeNode(element, baos);
-			String responseStr = new String(baos.toByteArray());
-			
-			System.out.println(responseStr);
-			
-		} catch (Throwable t) {
-			t.printStackTrace();
-		}
-	}
+            Element element = marshaller.marshall(responseInitial);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            XMLHelper.writeNode(element, baos);
+            String responseStr = new String(baos.toByteArray());
+
+            System.out.println(responseStr);
+
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
 }
