@@ -130,7 +130,7 @@ public class SamlAssertionProducer {
 	private Response createResponse(final DateTime issueDate, Issuer issuer, Status status, Assertion assertion) {
 		ResponseBuilder responseBuilder = new ResponseBuilder();
 		Response response = responseBuilder.buildObject();
-		response.setID(UUID.randomUUID().toString());
+		response.setID("_"+UUID.randomUUID().toString());
 		response.setIssueInstant(issueDate);
 		response.setVersion(SAMLVersion.VERSION_20);
 		response.setIssuer(issuer);
@@ -143,7 +143,7 @@ public class SamlAssertionProducer {
 			                          AttributeStatement attributeStatement) {
 		AssertionBuilder assertionBuilder = new AssertionBuilder();
 		Assertion assertion = assertionBuilder.buildObject();
-		assertion.setID(UUID.randomUUID().toString());
+		assertion.setID("_"+UUID.randomUUID().toString());
 		assertion.setIssueInstant(issueDate);
 		assertion.setSubject(subject);
 		assertion.setIssuer(issuer);
